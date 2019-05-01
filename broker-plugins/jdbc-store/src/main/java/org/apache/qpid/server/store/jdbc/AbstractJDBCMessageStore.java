@@ -83,9 +83,10 @@ public abstract class AbstractJDBCMessageStore implements MessageStore
     private static final String XID_TABLE_NAME_SUFFIX = "QPID_XIDS";
     private static final String XID_ACTIONS_TABLE_NAME_SUFFIX = "QPID_XID_ACTIONS";
 
-    private static final int IN_CLAUSE_MAX_SIZE = Integer.getInteger("qpid.jdbcstore.inClauseMaxSize",1000);
-
     private static final int DB_VERSION = 8;
+
+    private static final int IN_CLAUSE_MAX_SIZE_DEFAULT = 1000;
+    static final String IN_CLAUSE_MAX_SIZE = "qpid.jdbcstore.inClauseMaxSize";
 
     private final AtomicLong _messageId = new AtomicLong(0);
 
@@ -107,6 +108,7 @@ public abstract class AbstractJDBCMessageStore implements MessageStore
 
     protected abstract void checkMessageStoreOpen();
     private ScheduledThreadPoolExecutor _executor;
+    private volatile int _inClauseMaxSize;
 
     public AbstractJDBCMessageStore()
     {
@@ -230,6 +232,7 @@ public abstract class AbstractJDBCMessageStore implements MessageStore
         });
         _executor.prestartAllCoreThreads();
 
+        _inClauseMaxSize = getContextValue(Integer.class, IN_CLAUSE_MAX_SIZE, IN_CLAUSE_MAX_SIZE_DEFAULT);
     }
 
     @Override
@@ -473,7 +476,7 @@ public abstract class AbstractJDBCMessageStore implements MessageStore
             {
                 try
                 {
-                    for (List<Long> boundMessageIds : Lists.partition(messageIds, IN_CLAUSE_MAX_SIZE))
+                    for (List<Long> boundMessageIds : Lists.partition(messageIds, _inClauseMaxSize))
                     {
                         removeMessagesFromDatabase(conn, boundMessageIds);
                     }
@@ -1931,6 +1934,20 @@ public abstract class AbstractJDBCMessageStore implements MessageStore
                              getQueueEntryTableName(),
                              getXidTableName(),
                              getXidActionsTableName());
+    }
+
+    private <T> T getContextValue(final Class<T> paremeterClass,
+                                  final String parameterName,
+                                  final T defaultValue)
+    {
+        if (_parent.getContextKeys(false).contains(parameterName))
+        {
+            return _parent.getContextValue(paremeterClass, parameterName);
+        }
+        else
+        {
+            return defaultValue;
+        }
     }
 
 
